@@ -1,0 +1,87 @@
+name: release
+
+# Each vX.Y.Z tag builds the binaries from this repository's source and attaches them, with
+# SHA256SUMS, install.sh and the systemd unit, to a GitHub release, and pushes the multi-arch image
+# ghcr.io/codigate/agent:vX.Y.Z. Notes come from CHANGELOG.md. A tag with a suffix (v0.2.0-rc.1)
+# is a pre-release: it never becomes releases/latest or :latest.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - run: go test -count=1 ./...
+      - name: Build
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: |
+          mkdir dist
+          for target in linux/amd64 linux/arm64 linux/arm/7 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64; do
+            IFS=/ read -r os arch arm <<<"$target"
+            name="codigate-agent_${os}_${arch}${arm:+v$arm}"
+            [ "$os" = windows ] && name="$name.exe"
+            CGO_ENABLED=0 GOOS=$os GOARCH=$arch GOARM=$arm \
+              go build -trimpath -ldflags "-s -w -X main.version=$VERSION" -o "dist/$name" ./cmd/codigate-agent
+          done
+          cp templates/linux/install.sh templates/linux/codigate-agent.service dist/
+          (cd dist && sha256sum -- * > SHA256SUMS)
+          cat dist/SHA256SUMS
+      - name: Notes
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: |
+          awk -v v="## ${VERSION#v}" '$0 == v {on=1; next} /^## / && on {exit} on' CHANGELOG.md > notes.md
+          test -s notes.md || { echo "CHANGELOG.md has no section '## ${VERSION#v}'"; exit 1; }
+      - name: Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ github.ref_name }}
+        run: |
+          pre=()
+          [[ "$VERSION" == *-* ]] && pre=(--prerelease --latest=false)
+          gh release create "$VERSION" dist/* --title "$VERSION" --notes-file notes.md --verify-tag "${pre[@]}"
+
+  image:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - id: meta
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: |
+          repo="ghcr.io/${GITHUB_REPOSITORY,,}"
+          tags="$repo:$VERSION"
+          [[ "$VERSION" == *-* ]] || tags="$tags,$repo:latest"
+          echo "tags=$tags" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64,linux/arm/v7
+          push: true
+          build-args: VERSION=${{ github.ref_name }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ github.ref_name }}
+            org.opencontainers.image.licenses=Apache-2.0

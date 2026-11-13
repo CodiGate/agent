@@ -1,0 +1,23 @@
+name: Codigate
+version: "0.1.0"
+slug: codigate
+description: Reach Home Assistant from anywhere through Codigate, without opening ports
+url: https://github.com/codigate/agent/tree/main/templates/home-assistant/codigate
+arch: [aarch64, amd64, armv7]
+init: false
+startup: services
+boot: auto
+options:
+  token: ""
+  hostname: ""
+  rules: []
+  edge: https://connect.codigate.nl
+  log_level: info
+schema:
+  token: password
+  hostname: str?
+  rules:
+    - hostname: str
+      service: str
+  edge: url
+  log_level: list(debug|info|warn|error)

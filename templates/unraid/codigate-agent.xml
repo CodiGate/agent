@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>codigate-agent</Name>
+  <Repository>ghcr.io/codigate/agent:latest</Repository>
+  <Registry>https://github.com/codigate/agent/pkgs/container/agent</Registry>
+  <Network>bridge</Network>
+  <Shell>sh</Shell>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/codigate/agent/issues</Support>
+  <Project>https://github.com/codigate/agent</Project>
+  <Overview>Publish services on this server through Codigate (EU-hosted tunnel and login in front of your apps) without opening ports. The agent dials out to the Codigate edge on port 443. Put your ingress rules in /mnt/user/appdata/codigate/codigate.yml, or set Docker discovery to true and label the containers you want to publish (codigate.hostname, codigate.port).</Overview>
+  <Category>Network:Proxy Network:Management Security:</Category>
+  <WebUI/>
+  <TemplateURL>https://raw.githubusercontent.com/codigate/agent/main/templates/unraid/codigate-agent.xml</TemplateURL>
+  <Icon>https://raw.githubusercontent.com/codigate/agent/main/templates/icon.png</Icon>
+  <ExtraParams>--read-only --cap-drop ALL --security-opt no-new-privileges:true</ExtraParams>
+  <PostArgs/>
+  <Config Name="Agent token" Target="CODIGATE_TOKEN" Default="" Mode="" Description="Agent token from the Codigate dashboard (Agents)." Type="Variable" Display="always" Required="true" Mask="true"/>
+  <Config Name="Edge" Target="CODIGATE_EDGE" Default="https://connect.codigate.nl" Mode="" Description="Codigate edge URL." Type="Variable" Display="advanced" Required="true" Mask="false">https://connect.codigate.nl</Config>
+  <Config Name="Config folder" Target="/etc/codigate" Default="/mnt/user/appdata/codigate" Mode="ro" Description="Holds codigate.yml with your ingress rules. Not needed with Docker discovery." Type="Path" Display="always" Required="false" Mask="false">/mnt/user/appdata/codigate</Config>
+  <Config Name="Docker discovery" Target="CODIGATE_DOCKER" Default="false|true" Mode="" Description="Publish containers by their codigate.hostname labels. Needs Docker API access below." Type="Variable" Display="always" Required="false" Mask="false">false</Config>
+  <Config Name="Docker API" Target="DOCKER_HOST" Default="" Mode="" Description="Docker API for discovery, e.g. tcp://socket-proxy:2375 (a read-only docker-socket-proxy with CONTAINERS=1 and EVENTS=1)." Type="Variable" Display="advanced" Required="false" Mask="false"/>
+</Container>

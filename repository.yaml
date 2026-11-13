@@ -1,0 +1,5 @@
+# Home Assistant add-on repository: Settings → Add-ons → Add-on store → ⋮ → Repositories → add
+# https://github.com/codigate/agent
+name: Codigate
+url: https://github.com/codigate/agent
+maintainer: Codicon <support@codigate.nl>

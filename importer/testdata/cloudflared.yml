@@ -1,0 +1,40 @@
+tunnel: 6ff42ae2-765d-4adf-8112-31c55c1551ef
+credentials-file: /root/.cloudflared/6ff42ae2-765d-4adf-8112-31c55c1551ef.json
+warp-routing:
+  enabled: true
+originRequest:
+  connectTimeout: 30s
+  noTLSVerify: false
+ingress:
+  - hostname: Grafana.Example.com
+    service: http://localhost:3000
+  - hostname: grafana.example.com
+    service: http://localhost:3001
+  - hostname: static.example.com
+    path: \.(jpg|png|css|js)$
+    service: http://localhost:8001
+  - hostname: static.example.com
+    service: http://localhost:8000
+  - hostname: nas.example.com
+    service: https://192.168.1.10:5001
+    originRequest:
+      matchSNIToHost: true
+      noTLSVerify: true
+      access:
+        required: true
+        teamName: acme
+  - hostname: "*.dev.example.com"
+    service: http://localhost:8080
+    originRequest:
+      httpHostHeader: dev.internal
+  - hostname: ssh.example.com
+    service: ssh://localhost:22
+  - hostname: rdp.example.com
+    service: rdp://10.0.0.5
+  - hostname: smb.example.com
+    service: smb://nas:445
+  - hostname: socks.example.com
+    service: http://localhost:9000
+    originRequest:
+      bastionMode: true
+  - service: http_status:404

@@ -1,0 +1,40 @@
+# Example codigate-agent configuration. The format follows cloudflared's config.yml ingress rules,
+# so an existing cloudflared config needs few changes.
+
+# The edge to connect to (https only, unless allow_insecure_edge is set for local testing).
+edge: https://connect.codigate.nl
+
+# The agent token from the dashboard. Prefer token_file or the CODIGATE_TOKEN environment variable
+# over putting the token in this file.
+token_file: /etc/codigate/token
+
+# Optional: extra CA certificates to trust for the edge (private CAs, local development).
+# edge_ca_file: /etc/codigate/edge-ca.pem
+
+log_level: info # debug, info, warn, error
+
+# Optional: serve containers by their codigate.* labels (see the README). With docker enabled,
+# ingress may be empty.
+# docker:
+#   enabled: true
+#   endpoint: tcp://socket-proxy:2375 # default: DOCKER_HOST or unix:///var/run/docker.sock
+#   create_apps: false                # needs api and api_token (CODIGATE_API_TOKEN)
+# api: https://app.codigate.nl
+
+# Rules are matched top to bottom: exact hostname, then "*." one-label wildcard. The last rule must
+# be a catch-all without a hostname. Services: http://, https://, tcp://host:port, ssh://host[:port]
+# (TCP needs an exact hostname) and http_status:<code>.
+ingress:
+  - hostname: grafana.example.nl
+    service: http://localhost:3000
+  - hostname: nas.example.nl
+    service: https://192.168.1.10:5001
+    originRequest:
+      noTLSVerify: true # self-signed certificate on the NAS
+  - hostname: "*.dev.example.nl"
+    service: http://localhost:8080
+    originRequest:
+      httpHostHeader: dev.internal
+  - hostname: ssh.example.nl
+    service: ssh://localhost # clients: codigate-agent access tcp ssh.example.nl
+  - service: http_status:404

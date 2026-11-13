@@ -1,0 +1,36 @@
+# Codigate agent with Docker-label discovery.
+#   1. Put CODIGATE_TOKEN=<agent token from the dashboard> in .env next to this file.
+#   2. Label the containers you want to publish (see "whoami" below).
+#   3. docker compose up -d
+# Every hostname needs an app in the dashboard, or set CODIGATE_CREATE_APPS (see the README).
+services:
+  codigate-agent:
+    image: ghcr.io/codigate/agent:latest
+    restart: unless-stopped
+    environment:
+      CODIGATE_EDGE: https://connect.codigate.nl
+      CODIGATE_TOKEN: ${CODIGATE_TOKEN:?set CODIGATE_TOKEN in .env}
+      CODIGATE_DOCKER: "true"
+      DOCKER_HOST: tcp://socket-proxy:2375
+    depends_on: [socket-proxy]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+
+  # Read-only Docker API for the agent: container list and events only.
+  socket-proxy:
+    image: tecnativa/docker-socket-proxy:latest
+    restart: unless-stopped
+    environment:
+      CONTAINERS: 1
+      EVENTS: 1
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+
+  # Example app: replace the hostname with one under your workspace or verified domain.
+  whoami:
+    image: traefik/whoami:latest
+    restart: unless-stopped
+    labels:
+      codigate.hostname: whoami.acme.codigate.nl
+      codigate.port: "80"
