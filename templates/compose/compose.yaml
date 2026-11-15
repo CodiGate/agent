@@ -17,9 +17,10 @@ services:
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
 
-  # Read-only Docker API for the agent: container list and events only.
+  # Read-only Docker API for the agent: container list and events only. It holds the full Docker
+  # socket (root on this host), so it is pinned by digest: update tag and digest together, deliberately.
   socket-proxy:
-    image: tecnativa/docker-socket-proxy:latest
+    image: tecnativa/docker-socket-proxy:v0.5.0@sha256:1f5038b54f06c3e18422902cf00ba21803d1c97805aae032e5e6673d532d3459
     restart: unless-stopped
     environment:
       CONTAINERS: 1
@@ -29,7 +30,7 @@ services:
 
   # Example app: replace the hostname with one under your workspace or verified domain.
   whoami:
-    image: traefik/whoami:latest
+    image: traefik/whoami:v1.12.0@sha256:c4717a8d1f0134a7444e24f881160e033991f23027c6c5a9a3f8fd22e70d1d44
     restart: unless-stopped
     labels:
       codigate.hostname: whoami.acme.codigate.nl

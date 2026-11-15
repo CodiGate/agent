@@ -4,9 +4,9 @@ Every release in [github.com/codigate/agent](https://github.com/codigate/agent/r
 
 ## Unreleased
 
-## 0.1.0-rc.1
+## 0.1.0
 
-Release candidate for the first public release.
+First release.
 
 - HTTP(S) and WebSocket tunnel to the Codigate edge over one outbound TLS connection on port 443, with `cloudflared`-style ingress rules.
 - TCP services: `tcp://host:port` and `ssh://host[:port]` rules, and `codigate-agent access tcp` for the connecting side (SSH `ProxyCommand` or a local listener), authenticated with a service token.
@@ -14,4 +14,9 @@ Release candidate for the first public release.
 - Environment-only setup: `CODIGATE_DOCKER`, `CODIGATE_CREATE_APPS`, `CODIGATE_API`; no config file needed with label discovery.
 - `import cloudflared`: converts a `config.yml` (HTTP, TCP and SSH rules; `rdp://` becomes `tcp://`) and can create the agent and apps through the API.
 - Install templates: Docker Compose, `install.sh` with a hardened systemd unit (Debian, Raspberry Pi OS, Proxmox LXC), Unraid and a Home Assistant add-on.
+- The Compose template pins `docker-socket-proxy` and `whoami` by digest (the socket proxy holds the Docker socket).
 - Multi-arch Docker image (`linux/amd64`, `linux/arm64`, `linux/arm/v7`).
+
+## 0.1.0-rc.1
+
+Release candidate for 0.1.0, to test the release chain; the same features.
