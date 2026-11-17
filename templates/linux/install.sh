@@ -55,7 +55,7 @@ fi
 
 if [ ! -f "$CONF_DIR/codigate.yml" ]; then
 	cat >"$CONF_DIR/codigate.yml" <<CONF
-# codigate-agent configuration: https://github.com/codigate/agent#run
+# codigate-agent configuration: https://codigate.nl/docs/agent/
 edge: $EDGE
 token_file: $CONF_DIR/token
 log_level: info

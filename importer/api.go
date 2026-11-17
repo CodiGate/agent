@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -54,6 +55,12 @@ func (a *API) CreateApp(ctx context.Context, name, hostname, agentID string) (st
 	}
 	err := a.do(ctx, http.MethodPost, "/apps", map[string]string{"name": name, "hostname": hostname, "agent_id": agentID}, &out)
 	return out.Data.ID, err
+}
+
+// ProtectApp sets an app's access: log in with idpID, then policy decides who gets in.
+func (a *API) ProtectApp(ctx context.Context, appID, idpID string, policy *Policy) error {
+	var out struct{}
+	return a.do(ctx, http.MethodPut, "/apps/"+url.PathEscape(appID)+"/access", map[string]any{"access": "protected", "idp_id": idpID, "policy": policy}, &out)
 }
 
 func (a *API) do(ctx context.Context, method, path string, body, out any) error {

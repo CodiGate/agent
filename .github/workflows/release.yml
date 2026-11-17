@@ -3,7 +3,9 @@ name: release
 # Each vX.Y.Z tag builds the binaries from this repository's source and attaches them, with
 # SHA256SUMS, install.sh and the systemd unit, to a GitHub release, and pushes the multi-arch image
 # ghcr.io/codigate/agent:vX.Y.Z. Notes come from CHANGELOG.md. A tag with a suffix (v0.2.0-rc.1)
-# is a pre-release: it never becomes releases/latest or :latest.
+# is a pre-release: it never becomes releases/latest or :latest. After the image, the Helm chart in
+# templates/helm is pushed as oci://ghcr.io/codigate/charts/codigate-agent with chart version and
+# appVersion X.Y.Z (pre-releases too; Helm only picks them when asked with --version or --devel).
 on:
   push:
     tags: ['v*']
@@ -85,3 +87,34 @@ jobs:
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.version=${{ github.ref_name }}
             org.opencontainers.image.licenses=Apache-2.0
+
+  chart:
+    needs: image
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    env:
+      HELM_VERSION: v4.3.2
+      HELM_SHA256: d1c0278d46beab79582d7e50f5b3dc206944ba8e577cde618513fd07daa53983
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install helm
+        run: |
+          mkdir -p "$RUNNER_TEMP/bin"
+          cd "$RUNNER_TEMP"
+          curl -fsSLo helm.tgz "https://get.helm.sh/helm-$HELM_VERSION-linux-amd64.tar.gz"
+          echo "$HELM_SHA256  helm.tgz" | sha256sum -c -
+          tar -xzf helm.tgz --strip-components=1 -C bin linux-amd64/helm
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+      - run: templates/helm/test.sh static
+      - name: Package and push
+        env:
+          VERSION: ${{ github.ref_name }}
+          ACTOR: ${{ github.actor }}
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          helm package templates/helm/codigate-agent --version "${VERSION#v}" --app-version "${VERSION#v}" -d dist
+          printf '%s' "$TOKEN" | helm registry login ghcr.io -u "$ACTOR" --password-stdin
+          helm push dist/codigate-agent-"${VERSION#v}".tgz "oci://ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/charts"
+          helm registry logout ghcr.io

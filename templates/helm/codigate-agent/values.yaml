@@ -1,0 +1,93 @@
+# Default values for the codigate-agent chart. See README.md for examples.
+
+# Number of agent pods. All pods use the same token; the edge spreads requests over them.
+replicaCount: 1
+
+image:
+  repository: ghcr.io/codigate/agent
+  # Defaults to v<appVersion>, the agent version this chart was released with.
+  tag: ""
+  # Optional digest (sha256:...). When set it is used instead of the tag.
+  digest: ""
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+# The agent token (starts with cga_). The chart stores it in a Secret.
+# Prefer existingSecret, so the token is not in your values or the Helm release.
+token: ""
+# Name of an existing Secret with the token. When set, token is ignored.
+existingSecret: ""
+# Key in the Secret that holds the token.
+existingSecretKey: token
+
+# The edge the agent connects to. Set as CODIGATE_EDGE, so it also applies to existingConfigMap.
+edge: https://connect.codigate.nl
+
+# The agent config file (codigate.yml), without edge and token. Rendered into a ConfigMap.
+# The last ingress rule must have no hostname: it catches everything else.
+config:
+  log_level: info
+  ingress:
+    # - hostname: grafana.example.codigate.app
+    #   service: http://grafana.monitoring.svc:80
+    - service: http_status:404
+
+# Name of an existing ConfigMap with the agent config. When set, config is ignored.
+existingConfigMap: ""
+# Key in the ConfigMap that holds the config file.
+existingConfigMapKey: codigate.yml
+
+serviceAccount:
+  create: true
+  # Defaults to the full name of the release.
+  name: ""
+  annotations: {}
+
+podAnnotations: {}
+podLabels: {}
+
+# Runs as the image's non-root user (65532) with a read-only root file system.
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  fsGroup: 65532
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  privileged: false
+  capabilities:
+    drop: [ALL]
+
+resources:
+  requests:
+    cpu: 10m
+    memory: 32Mi
+  limits:
+    memory: 128Mi
+
+priorityClassName: ""
+nodeSelector: {}
+tolerations: []
+affinity: {}
+topologySpreadConstraints: []
+
+terminationGracePeriodSeconds: 30
+
+podDisruptionBudget:
+  enabled: false
+  # Set minAvailable or maxUnavailable, not both.
+  minAvailable: 1
+  maxUnavailable: null
+
+# Extra environment variables, e.g. CODIGATE_API and CODIGATE_API_TOKEN from a Secret.
+extraEnv: []
+# Extra volumes and mounts, e.g. a CA bundle for edge_ca_file.
+extraVolumes: []
+extraVolumeMounts: []

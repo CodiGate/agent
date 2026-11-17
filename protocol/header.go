@@ -32,13 +32,27 @@ var (
 // StreamHeader tells the agent which application a stream is for. The agent maps the hostname to
 // an upstream using its own local ingress rules, so the edge can never pick an arbitrary upstream
 // inside the customer's network.
+//
+// Kind is empty for a proxied connection. KindHealth asks for origin health (P3-12); the edge only
+// sends it to agents that announced FeatureHealth, because older agents reject unknown fields.
 type StreamHeader struct {
-	Hostname string `json:"host"`
+	Hostname string `json:"host,omitempty"`
+	Kind     string `json:"kind,omitempty"`
 }
 
 // Validate checks the header is safe to use as a lookup key.
 func (h StreamHeader) Validate() error {
-	return ValidateHostname(h.Hostname)
+	switch h.Kind {
+	case "":
+		return ValidateHostname(h.Hostname)
+	case KindHealth:
+		if h.Hostname != "" {
+			return errors.New("protocol: a health stream has no hostname")
+		}
+		return nil
+	default:
+		return fmt.Errorf("protocol: unknown stream kind %q", h.Kind)
+	}
 }
 
 // ValidateHostname accepts lowercase DNS names (letters, digits, '-', '.'), max 253 characters.

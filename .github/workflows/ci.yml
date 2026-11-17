@@ -22,3 +22,42 @@ jobs:
       - run: go test -race -count=1 ./...
       - name: install.sh
         run: sh -n templates/linux/install.sh && shellcheck templates/linux/install.sh
+
+  chart:
+    # Lints and renders the Helm chart, then installs it on a throwaway k3s cluster (k3d) with an
+    # image built from this commit and a dummy token. The agent cannot reach an edge there, so the
+    # test checks that both pods run, start the agent, keep retrying and never print the token.
+    runs-on: ubuntu-24.04
+    env:
+      HELM_VERSION: v4.3.2
+      HELM_SHA256: d1c0278d46beab79582d7e50f5b3dc206944ba8e577cde618513fd07daa53983
+      K3D_VERSION: v5.9.0
+      K3D_SHA256: 06d8f25bc3a971c4eb29e0ff08429b180402db0f4dec838c9eac427e296800a0
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install helm and k3d
+        run: |
+          mkdir -p "$RUNNER_TEMP/bin"
+          cd "$RUNNER_TEMP"
+          curl -fsSLo helm.tgz "https://get.helm.sh/helm-$HELM_VERSION-linux-amd64.tar.gz"
+          echo "$HELM_SHA256  helm.tgz" | sha256sum -c -
+          tar -xzf helm.tgz --strip-components=1 -C bin linux-amd64/helm
+          curl -fsSLo bin/k3d "https://github.com/k3d-io/k3d/releases/download/$K3D_VERSION/k3d-linux-amd64"
+          echo "$K3D_SHA256  bin/k3d" | sha256sum -c -
+          chmod +x bin/k3d
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+      - name: test.sh
+        run: shellcheck templates/helm/test.sh
+      - name: Lint and template
+        run: templates/helm/test.sh static
+      - name: Build image
+        run: docker build -t codigate-agent:ci --build-arg VERSION=ci .
+      - name: Cluster
+        run: |
+          k3d cluster create chart-test --no-lb --wait --timeout 180s
+          k3d image import codigate-agent:ci -c chart-test
+      - name: Install
+        env:
+          IMAGE_REPOSITORY: codigate-agent
+          IMAGE_TAG: ci
+        run: templates/helm/test.sh install

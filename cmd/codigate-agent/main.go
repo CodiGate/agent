@@ -50,12 +50,15 @@ func main() {
 
 	logger.Info("starting codigate-agent", "version", version, "edge", cfg.Edge, "rules", len(cfg.Ingress), "docker", cfg.Docker.Enabled)
 	ingress := tunnel.NewIngress(cfg, logger)
+	health := tunnel.NewHealth(ingress, logger)
+	go health.Run(ctx)
 	client := &tunnel.Client{
 		EdgeURL: cfg.Edge,
 		Token:   cfg.Token,
 		Version: version,
 		Handler: ingress,
 		Logger:  logger,
+		Health:  health,
 	}
 	if cfg.Docker.Enabled {
 		d, err := startDiscovery(ctx, cfg, ingress, logger)

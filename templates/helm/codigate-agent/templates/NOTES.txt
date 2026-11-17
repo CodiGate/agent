@@ -1,0 +1,16 @@
+The Codigate agent is installed as {{ include "codigate-agent.fullname" . }} in namespace {{ .Release.Namespace }} ({{ .Values.replicaCount }} replica(s)).
+It connects out to {{ .Values.edge | default "the edge in your ConfigMap" }}; it opens no ports in the cluster.
+
+Check that it connects:
+
+  kubectl -n {{ .Release.Namespace }} logs deploy/{{ include "codigate-agent.fullname" . }} -f
+
+Look for "tunnel connected". "tunnel disconnected, reconnecting" means the agent cannot reach the
+edge or the token was rejected. The agent has no health endpoint, so the chart sets no probes.
+
+Every hostname in your ingress rules also needs an app in the dashboard.
+{{- if .Values.token }}
+
+The token is stored in the Secret {{ include "codigate-agent.fullname" . }} and in the Helm release.
+To keep it out of Helm, create a Secret yourself and set existingSecret.
+{{- end }}

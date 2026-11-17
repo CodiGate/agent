@@ -1,0 +1,9 @@
+# Used by ../test.sh: an existing Secret and ConfigMap, a pinned digest and a PodDisruptionBudget.
+existingSecret: my-codigate-token
+existingSecretKey: agent-token
+existingConfigMap: my-codigate-config
+image:
+  digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+replicaCount: 2
+podDisruptionBudget:
+  enabled: true

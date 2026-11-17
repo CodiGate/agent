@@ -8,6 +8,7 @@ Ready-made ways to run the agent. They all end up with the same binary and the s
 | Debian, Ubuntu, Raspberry Pi OS, Proxmox LXC | [linux/install.sh](./linux/install.sh) and the hardened [systemd unit](./linux/codigate-agent.service) |
 | Unraid | [unraid/codigate-agent.xml](./unraid/codigate-agent.xml) |
 | Home Assistant OS / Supervised | the add-on in [home-assistant/codigate](./home-assistant/codigate/) |
+| Kubernetes (k3s and others) | the Helm chart in [helm/codigate-agent](./helm/codigate-agent/), published as `oci://ghcr.io/codigate/charts/codigate-agent` |
 
 ## Docker Compose
 
@@ -49,3 +50,14 @@ For label discovery instead of a config file: run `tecnativa/docker-socket-proxy
 ## Home Assistant
 
 Settings → Add-ons → Add-on store → ⋮ → Repositories → add `https://github.com/codigate/agent`, then install **Codigate**. See [DOCS.md](./home-assistant/codigate/DOCS.md) for the options and the one change Home Assistant itself needs (`trusted_proxies`).
+
+## Kubernetes (Helm)
+
+```sh
+kubectl create namespace codigate
+kubectl -n codigate create secret generic codigate-token --from-literal=token='cga_…'
+helm install codigate-agent oci://ghcr.io/codigate/charts/codigate-agent \
+  --version 0.2.0 -n codigate --set existingSecret=codigate-token -f values.yaml
+```
+
+`values.yaml` holds the ingress rules under `config:`. Point them at Services by their cluster DNS name, e.g. `service: http://grafana.monitoring.svc:80`, and end with a catch-all `service: http_status:404`. The chart version is the agent version. The pods run as non-root with a read-only root file system and no Kubernetes API access. Set `replicaCount: 2` and `podDisruptionBudget.enabled: true` to keep a tunnel up during node drains. See the [chart README](./helm/codigate-agent/README.md) for all values.

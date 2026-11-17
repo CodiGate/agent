@@ -34,6 +34,9 @@ type Client struct {
 	// (see HostnameFromContext).
 	Handler http.Handler
 	Logger  *slog.Logger
+	// Health answers the edge's origin health requests (P3-12). When nil the agent does not
+	// announce the feature and the edge never asks.
+	Health *Health
 
 	// DialContext overrides how the TCP connection to the edge is made (tests). Proxy settings
 	// from the environment (HTTPS_PROXY, NO_PROXY) are used when nil.
@@ -145,6 +148,9 @@ func (c *Client) connect(ctx context.Context) (io.ReadWriteCloser, string, strin
 	req.Header.Set("Upgrade", protocol.UpgradeToken)
 	req.Header.Set("Authorization", "Bearer "+c.Token)
 	req.Header.Set(protocol.HeaderAgentVersion, c.Version)
+	if c.Health != nil {
+		req.Header.Set(protocol.HeaderAgentFeatures, protocol.FeatureHealth)
+	}
 	resp, err := tr.RoundTrip(req)
 	if err != nil {
 		return nil, "", "", fmt.Errorf("tunnel: connect: %w", err)
@@ -199,6 +205,17 @@ func (c *Client) serve(ctx context.Context, session *yamux.Session) error {
 				if err != nil {
 					c.Logger.Warn("rejecting stream with bad header", "err", err)
 					stream.Close()
+					return
+				}
+				if h.Kind == protocol.KindHealth {
+					if c.Health == nil {
+						stream.Close()
+						return
+					}
+					stream.SetDeadline(time.Now().Add(30 * time.Second))
+					if err := c.Health.serveHealth(ctx, stream); err != nil {
+						c.Logger.Debug("health request failed", "err", err)
+					}
 					return
 				}
 				stream.SetReadDeadline(time.Time{})

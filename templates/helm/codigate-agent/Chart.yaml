@@ -1,0 +1,17 @@
+apiVersion: v2
+name: codigate-agent
+description: Codigate agent. Publishes services in your cluster through one outbound connection to the Codigate edge.
+type: application
+# The release workflow sets version and appVersion to the release version (vX.Y.Z without the v).
+version: 0.1.0
+appVersion: "0.1.0"
+kubeVersion: ">=1.25.0-0"
+home: https://codigate.nl
+sources:
+  - https://github.com/codigate/agent
+keywords:
+  - tunnel
+  - zero-trust
+  - reverse-proxy
+  - codigate
+icon: https://codigate.nl/icon-192.png

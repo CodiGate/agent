@@ -2,7 +2,9 @@ package main
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -135,5 +137,111 @@ func TestImportCreatesAgentAndApps(t *testing.T) {
 	// Existing agent: no agent call, no token written.
 	if code, _, _ := run(t, "cloudflared", "-out", "-", "-api", srv.URL, "-agent", "agt_old", src); code != 1 || strings.Contains(strings.Join(*calls, ","), "agents") || !strings.Contains((*calls)[0], "agt_old") {
 		t.Errorf("existing agent: exit %d calls %v", code, *calls)
+	}
+}
+
+// A remotely managed tunnel (cloudflared --token) imports from the Cloudflare API (P2-16).
+func TestImportFromCloudflareAPI(t *testing.T) {
+	const account, tunnel = "0123456789abcdef0123456789abcdef", "c1744f8b-faa1-48a4-9e5c-02ac921467fa"
+	var paths []string
+	cf := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		paths = append(paths, r.Header.Get("Authorization")+" "+r.URL.Path)
+		if strings.HasSuffix(r.URL.Path, "/configurations") {
+			w.Write([]byte(`{"success":true,"result":{"config":{"ingress":[{"hostname":"ha.example.com","service":"http://homeassistant:8123"},{"service":"http_status:404"}]}}}`))
+			return
+		}
+		w.Write([]byte(`{"success":true,"result":{"name":"docker-home"}}`))
+	}))
+	t.Cleanup(cf.Close)
+	token := base64.StdEncoding.EncodeToString([]byte(`{"a":"` + account + `","t":"` + tunnel + `","s":"dHVubmVsLXNlY3JldA=="}`))
+	t.Setenv("CLOUDFLARE_API_TOKEN", "cf-api")
+	t.Setenv("TUNNEL_TOKEN", token)
+
+	code, stdout, stderr := run(t, "cloudflared", "-cf", "-cf-api", cf.URL, "-out", "-")
+	if code != 0 || !strings.Contains(stdout, "hostname: ha.example.com") || !strings.Contains(stdout, `docker-home`) {
+		t.Fatalf("exit %d\n%s\n%s", code, stdout, stderr)
+	}
+	want := "Bearer cf-api /accounts/" + account + "/cfd_tunnel/" + tunnel
+	if len(paths) != 2 || paths[0] != want || paths[1] != want+"/configurations" {
+		t.Errorf("requests %q", paths)
+	}
+
+	// A tunnel id needs the account; a file argument and -cf don't mix; no API token, no request.
+	if code, _, stderr := run(t, "cloudflared", "-cf", "-cf-api", cf.URL, "-cf-tunnel", tunnel, "-out", "-"); code != 1 || !strings.Contains(stderr, "-cf-account") {
+		t.Errorf("id without account: %d %s", code, stderr)
+	}
+	if code, _, _ := run(t, "cloudflared", "-cf", "-cf-api", cf.URL, "-cf-tunnel", tunnel, "-cf-account", account, "-out", "-"); code != 0 {
+		t.Errorf("id with account: %d", code)
+	}
+	if code, _, _ := run(t, "cloudflared", "-cf", "config.yml"); code != 2 {
+		t.Errorf("-cf with a file: %d", code)
+	}
+	t.Setenv("CLOUDFLARE_API_TOKEN", "")
+	if code, _, stderr := run(t, "cloudflared", "-cf", "-cf-api", cf.URL, "-out", "-"); code != 1 || !strings.Contains(stderr, "CLOUDFLARE_API_TOKEN") {
+		t.Errorf("no API token: %d %s", code, stderr)
+	}
+}
+
+// -cf-access maps Cloudflare Access onto the new apps and, with -idp, sets it (P2-03).
+func TestImportAccessFromCloudflare(t *testing.T) {
+	const account = "0123456789abcdef0123456789abcdef"
+	cf := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/accounts/"+account+"/access/apps" || r.Header.Get("Authorization") != "Bearer cf-api" {
+			w.WriteHeader(404)
+			w.Write([]byte(`{"success":false,"errors":[{"code":1,"message":"nope"}]}`))
+			return
+		}
+		w.Write([]byte(`{"success":true,"result":[
+			{"name":"Grafana","type":"self_hosted","domain":"grafana.example.com","policies":[{"name":"staff","decision":"allow","include":[{"email_domain":{"domain":"example.com"}}]}]},
+			{"name":"Taken","type":"self_hosted","domain":"taken.example.com","policies":[{"name":"staff","decision":"allow","include":[{"everyone":{}}]}]}]}`))
+	}))
+	t.Cleanup(cf.Close)
+	var mu sync.Mutex
+	var puts []string
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		switch {
+		case r.Method == http.MethodPut:
+			mu.Lock()
+			puts = append(puts, r.URL.Path+" "+string(body))
+			mu.Unlock()
+			w.Write([]byte(`{"data":{}}`))
+		case r.URL.Path == "/api/v1/agents":
+			w.WriteHeader(201)
+			w.Write([]byte(`{"data":{"id":"agt_new"},"token":"cga_secret"}`))
+		case strings.Contains(string(body), "taken.example.com"):
+			w.WriteHeader(422)
+			w.Write([]byte(`{"message":"x","errors":{"hostname":["This hostname is already in use."]}}`))
+		default:
+			w.WriteHeader(201)
+			w.Write([]byte(`{"data":{"id":"app_grafana"}}`))
+		}
+	}))
+	t.Cleanup(api.Close)
+	dir := t.TempDir()
+	src := filepath.Join(dir, "config.yml")
+	os.WriteFile(src, []byte(sample), 0o644)
+	t.Setenv("CLOUDFLARE_API_TOKEN", "cf-api")
+	t.Setenv("CODIGATE_API_TOKEN", "cgk_x")
+	t.Setenv("TUNNEL_TOKEN", "")
+
+	// Without -api: only shown.
+	code, _, stderr := run(t, "cloudflared", "-cf-access", "-cf-api", cf.URL, "-cf-account", account, "-out", "-", src)
+	if code != 0 || !strings.Contains(stderr, `access grafana.example.com (from "Grafana"): domains example.com`) {
+		t.Fatalf("exit %d: %s", code, stderr)
+	}
+
+	code, _, stderr = run(t, "cloudflared", "-cf-access", "-cf-api", cf.URL, "-cf-account", account, "-api", api.URL, "-idp", "idp_kc",
+		"-write-token", filepath.Join(dir, "tok"), "-out", filepath.Join(dir, "codigate.yml"), src)
+	if code != 1 { // taken.example.com fails to create
+		t.Errorf("exit %d: %s", code, stderr)
+	}
+	want := `/api/v1/apps/app_grafana/access {"access":"protected","idp_id":"idp_kc","policy":{"everyone":false,"emails":[],"email_domains":["example.com"],"groups":[]}}`
+	if len(puts) != 1 || puts[0] != want {
+		t.Errorf("PUTs %q\n%s", puts, stderr)
+	}
+
+	if code, _, stderr := run(t, "cloudflared", "-cf-access", "-cf-api", cf.URL, "-out", "-", src); code != 1 || !strings.Contains(stderr, "-cf-account") {
+		t.Errorf("no account: %d %s", code, stderr)
 	}
 }

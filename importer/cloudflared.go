@@ -110,7 +110,7 @@ func Cloudflared(data []byte, opts Options) (*Result, error) {
 		return nil, fmt.Errorf("cloudflared config: %w", err)
 	}
 	if len(cf.Ingress) == 0 {
-		return nil, errors.New("cloudflared config has no ingress rules; only locally managed tunnels with a config.yml can be imported")
+		return nil, errors.New("cloudflared config has no ingress rules; for a tunnel run with --token, import it with -cf")
 	}
 	if opts.Edge == "" {
 		opts.Edge = "https://connect.codigate.nl"

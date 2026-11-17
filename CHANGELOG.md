@@ -1,8 +1,13 @@
 # Changelog
 
-Every release in [github.com/codigate/agent](https://github.com/codigate/agent/releases) is one commit with the section below as its message. Binaries for Linux, macOS and Windows and a `SHA256SUMS` file are attached to the release; the Docker image is `ghcr.io/codigate/agent:vX.Y.Z` (`:latest` for stable releases).
+Every release in [github.com/codigate/agent](https://github.com/codigate/agent/releases) is one commit with the section below as its message. Binaries for Linux, macOS and Windows and a `SHA256SUMS` file are attached to the release; the Docker image is `ghcr.io/codigate/agent:vX.Y.Z` (`:latest` for stable releases) and the Helm chart `oci://ghcr.io/codigate/charts/codigate-agent` version `X.Y.Z`.
 
-## Unreleased
+## 0.2.0
+
+- Helm chart for Kubernetes: `helm install codigate-agent oci://ghcr.io/codigate/charts/codigate-agent --version X.Y.Z`. Token from an existing Secret or from values, ingress rules from values or an existing ConfigMap, replicas with an optional PodDisruptionBudget, a restricted security context and no Kubernetes API access. The chart is released with every agent version.
+- `import cloudflared -cf`: imports a remotely managed tunnel (cloudflared run with `--token`) by reading its rules from the Cloudflare API, with a read-only API token and the tunnel token (whose secret is never used).
+- `import cloudflared -cf-access`: carries Cloudflare Access policies over to the new apps where that is safe (allow rules on emails, domains, groups, everyone); anything stricter-than-allow is reported and left for you.
+- Origin health checks: the agent checks each origin every 30 seconds (an HTTP GET where any answer below 500 counts as up, honouring `noTLSVerify`, with a 5 second timeout; a TCP connect for `tcp://` and `ssh://` rules) and reports the result to the edge when asked. The dashboard shows the status and can alert you when an origin stays down. Older edges never ask, so nothing changes there.
 
 ## 0.1.0
 

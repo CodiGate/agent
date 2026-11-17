@@ -1,0 +1,11 @@
+{{- if not .Values.existingConfigMap }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "codigate-agent.fullname" . }}
+  labels:
+    {{- include "codigate-agent.labels" . | nindent 4 }}
+data:
+  codigate.yml: |
+    {{- toYaml .Values.config | nindent 4 }}
+{{- end }}

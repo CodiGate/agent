@@ -24,10 +24,11 @@ type fakeEdge struct {
 	*httptest.Server
 	token    string
 	sessions chan *yamux.Session
+	features chan string
 }
 
 func newFakeEdge(t *testing.T, token string) *fakeEdge {
-	e := &fakeEdge{token: token, sessions: make(chan *yamux.Session, 8)}
+	e := &fakeEdge{token: token, sessions: make(chan *yamux.Session, 8), features: make(chan string, 8)}
 	e.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != protocol.ConnectPath || r.Header.Get("Upgrade") != protocol.UpgradeToken {
 			http.Error(w, "bad upgrade", http.StatusBadRequest)
@@ -36,6 +37,10 @@ func newFakeEdge(t *testing.T, token string) *fakeEdge {
 		if r.Header.Get("Authorization") != "Bearer "+e.token {
 			http.Error(w, "no", http.StatusUnauthorized)
 			return
+		}
+		select {
+		case e.features <- r.Header.Get(protocol.HeaderAgentFeatures):
+		default:
 		}
 		conn, brw, err := http.NewResponseController(w).Hijack()
 		if err != nil {

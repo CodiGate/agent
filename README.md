@@ -48,7 +48,7 @@ Inside the container `localhost` is the agent itself. Point `service:` at other 
 
 ## Install templates
 
-Docker Compose, a systemd install script (Debian, Raspberry Pi OS, Proxmox LXC), Unraid and a Home Assistant add-on: see [templates](./templates/README.md). Release binaries for Linux, macOS and Windows, with `SHA256SUMS`, are on the [releases page](https://github.com/codigate/agent/releases).
+Docker Compose, a systemd install script (Debian, Raspberry Pi OS, Proxmox LXC), Unraid, a Home Assistant add-on and a Helm chart for Kubernetes: see [templates](./templates/README.md). Release binaries for Linux, macOS and Windows, with `SHA256SUMS`, are on the [releases page](https://github.com/codigate/agent/releases).
 
 ## Docker labels
 
@@ -122,7 +122,7 @@ codigate-agent import cloudflared -api https://app.codigate.nl -dry-run  # show 
 codigate-agent import cloudflared -api https://app.codigate.nl           # create an agent + the apps
 ```
 
-The importer converts a locally managed tunnel's `config.yml` (the rules in the Cloudflare dashboard for remotely managed tunnels aren't read yet). Every difference is reported as a `warn` or `info` note, on stderr and at the top of the generated file:
+The importer converts a locally managed tunnel's `config.yml`, or with `-cf` a remotely managed tunnel's rules from the Cloudflare API (see below). Every difference is reported as a `warn` or `info` note, on stderr and at the top of the generated file:
 
 | cloudflared | Codigate |
 | --- | --- |
@@ -147,7 +147,39 @@ docker run --rm --user "$(id -u):$(id -g)" -w /out -v "$PWD":/out \
     ghcr.io/codigate/agent import cloudflared /in/config.yml
 ```
 
-Service names such as `http://homeassistant:8123` keep working when the agent joins the network cloudflared was on. **cloudflared started with `--token`** (remotely managed) has no `config.yml`: its rules live in the Cloudflare dashboard, and importing those is on the backlog.
+Service names such as `http://homeassistant:8123` keep working when the agent joins the network cloudflared was on.
+
+**cloudflared started with `--token`** (remotely managed, the usual Docker setup) has no `config.yml`: its rules live in the Cloudflare dashboard. Create a Cloudflare API token with **Account → Cloudflare Tunnel → Read** (My Profile → API Tokens → Create Custom Token) and pass the tunnel token cloudflared runs with:
+
+```sh
+export CLOUDFLARE_API_TOKEN=…        # read-only, can be deleted afterwards
+export TUNNEL_TOKEN=eyJh…            # the value after --token, or TUNNEL_TOKEN from your compose file
+codigate-agent import cloudflared -cf                      # writes codigate.yml
+codigate-agent import cloudflared -cf -api https://app.codigate.nl   # and creates the agent + apps
+```
+
+The importer reads only the account and tunnel id from the tunnel token; its secret is never used or sent. Instead of the token you can pass `-cf-tunnel <tunnel id> -cf-account <account id>` (both on the tunnel's page in Cloudflare Zero Trust).
+
+**Cloudflare Access policies** carry over with `-cf-access` (the API token then also needs **Account → Access: Apps and Policies → Read**). The importer shows, per hostname, which rules it found; with `-api` and `-idp idp_…` it sets them on the new apps:
+
+```sh
+codigate-agent import cloudflared -cf -cf-access                                       # show the mapping
+codigate-agent import cloudflared -cf -cf-access -api https://app.codigate.nl -idp idp_…  # create + set access
+```
+
+Codigate rules only allow (everyone who can log in, email addresses, email domains, groups), so:
+
+| Cloudflare Access | Codigate |
+| --- | --- |
+| Allow: emails, email domains, everyone | the same |
+| Allow: Entra ID groups, Okta groups, SAML `groups` attribute, OIDC `groups` claim | groups (the provider you choose with `-idp` must send them) |
+| Allow: Access groups | their include rules, as above |
+| Allow: IP ranges, countries, login methods, GitHub orgs, Google groups, lists | dropped and reported (fewer people get in, never more) |
+| Service token rules, non-identity policies | dropped; create service tokens in Codigate |
+| Require or exclude rules, deny or bypass policies | the app's access is **not imported**; set it yourself |
+| Access applications for a path (`example.com/api`) | reported; Codigate uses one policy per hostname |
+
+An app without imported access stays protected and is not served until you set its access.
 
 ## How it works
 
