@@ -2,6 +2,10 @@
 
 Every release in [github.com/codigate/agent](https://github.com/codigate/agent/releases) is one commit with the section below as its message. Binaries for Linux, macOS and Windows and a `SHA256SUMS` file are attached to the release; the Docker image is `ghcr.io/codigate/agent:vX.Y.Z` (`:latest` for stable releases) and the Helm chart `oci://ghcr.io/codigate/charts/codigate-agent` version `X.Y.Z`.
 
+## 0.2.1
+
+- `import cloudflared`: merging `originRequest` defaults into a rule no longer sizes the map from a sum of lengths (CodeQL: size computation may overflow). No change in behaviour.
+
 ## 0.2.0
 
 - Helm chart for Kubernetes: `helm install codigate-agent oci://ghcr.io/codigate/charts/codigate-agent --version X.Y.Z`. Token from an existing Secret or from values, ingress rules from values or an existing ConfigMap, replicas with an optional PodDisruptionBudget, a restricted security context and no Kubernetes API access. The chart is released with every agent version.

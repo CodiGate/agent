@@ -116,5 +116,10 @@ jobs:
         run: |
           helm package templates/helm/codigate-agent --version "${VERSION#v}" --app-version "${VERSION#v}" -d dist
           printf '%s' "$TOKEN" | helm registry login ghcr.io -u "$ACTOR" --password-stdin
-          helm push dist/codigate-agent-"${VERSION#v}".tgz "oci://ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/charts"
+          # GHCR sometimes answers 404 to Helm 4's tag step for a manifest it has just accepted; retry.
+          for i in 1 2 3 4; do
+            helm push dist/codigate-agent-"${VERSION#v}".tgz "oci://ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/charts" && break
+            [ "$i" = 4 ] && exit 1
+            sleep $((i * 10))
+          done
           helm registry logout ghcr.io

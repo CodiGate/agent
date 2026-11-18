@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"maps"
 	"net"
 	"sort"
 	"strings"
@@ -330,13 +331,11 @@ func convertOrigin(m map[string]any, inherited map[string]bool, host, service st
 }
 
 func merge(defaults, rule map[string]any) map[string]any {
-	m := make(map[string]any, len(defaults)+len(rule))
-	for k, v := range defaults {
-		m[k] = v
+	m := maps.Clone(defaults)
+	if m == nil {
+		m = map[string]any{}
 	}
-	for k, v := range rule {
-		m[k] = v
-	}
+	maps.Copy(m, rule)
 	return m
 }
 
