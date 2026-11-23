@@ -1,10 +1,14 @@
 # Contributing
 
-Thanks for helping. Issues with a clear reproduction (agent version, config with secrets removed, logs at `log_level: debug`) are the most useful contribution.
+This repository is a read-only mirror: it is published from Codigate's internal monorepo, one commit per release.
+Pull requests and issues are switched off for now.
 
-**Pull requests**: please open an issue first for anything bigger than a small fix. Before we can merge outside contributions we ask you to sign a contributor licence agreement (CLA); we'll send a link in the pull request. The agent stays Apache-2.0.
+- **Bugs and questions**: email hello@codigate.nl with the agent version and the steps to reproduce (remove secrets).
+- **Security issues**: use [private vulnerability reporting](../../security/advisories/new) or email security@codigate.nl.
 
-This repository is published from Codigate's internal monorepo: each release lands here as one commit. Accepted pull requests are applied there and show up in the next release, with you credited as co-author.
+The code stays Apache-2.0; you are welcome to read, build and fork it.
+
+Building and testing locally:
 
 ```sh
 go test -race ./...

@@ -2,6 +2,10 @@
 
 Every release in [github.com/codigate/agent](https://github.com/codigate/agent/releases) is one commit with the section below as its message. Binaries for Linux, macOS and Windows and a `SHA256SUMS` file are attached to the release; the Docker image is `ghcr.io/codigate/agent:vX.Y.Z` (`:latest` for stable releases) and the Helm chart `oci://ghcr.io/codigate/charts/codigate-agent` version `X.Y.Z`.
 
+## 0.2.2
+
+- Clear start-up errors for a broken configuration: the config path is a directory (Docker creates an empty directory when the mounted file does not exist on the host; the message says how to fix it), the file is missing or empty, a YAML error (with the line), no ingress rules, or no token. The agent prints one message and exits instead of a bare read error.
+
 ## 0.2.1
 
 - `import cloudflared`: merging `originRequest` defaults into a rule no longer sizes the map from a sum of lengths (CodeQL: size computation may overflow). No change in behaviour.

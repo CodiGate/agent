@@ -96,15 +96,30 @@ func (r *Rule) TCPAddr() string { return r.tcp }
 
 // Load reads, applies environment overrides and validates a config file.
 // Without a file, CODIGATE_DOCKER=true plus the environment (edge, token) is a complete config.
+// Errors name the file and say what to do: the agent often runs unattended in Docker, where the
+// log line is all the user sees before the restart loop.
 func Load(path string) (*Config, error) {
+	if fi, err := os.Stat(path); err == nil && fi.IsDir() {
+		return nil, fmt.Errorf("%s is a directory, not a file. Docker creates an empty directory when the file you mount "+
+			"does not exist on the host. Create codigate.yml next to compose.yaml (remove the empty codigate.yml directory first), "+
+			"then run docker compose up -d --force-recreate", path)
+	}
 	data, err := os.ReadFile(path)
 	if errors.Is(err, fs.ErrNotExist) && envBool(os.Getenv("CODIGATE_DOCKER")) {
 		data, err = []byte("{}"), nil
 	}
-	if err != nil {
-		return nil, err
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, fmt.Errorf("config file %s not found. Create it (see codigate.example.yml), or point CODIGATE_CONFIG "+
+			"(or -config) at it. In Docker, mount it: ./codigate.yml:/etc/codigate/codigate.yml:ro", path)
 	}
-	return Parse(data, os.Getenv)
+	if err != nil {
+		return nil, fmt.Errorf("config file %s can't be read: %w", path, err)
+	}
+	c, err := Parse(data, os.Getenv)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", path, err)
+	}
+	return c, nil
 }
 
 func envBool(v string) bool {
@@ -115,10 +130,17 @@ func envBool(v string) bool {
 // Parse is Load without the file system; getenv is injectable for tests.
 func Parse(data []byte, getenv func(string) string) (*Config, error) {
 	var c Config
+	if strings.TrimSpace(string(data)) == "" {
+		if !envBool(getenv("CODIGATE_DOCKER")) {
+			return nil, errors.New("the config file is empty. Add edge and your ingress rules (see codigate.example.yml), " +
+				"or set CODIGATE_DOCKER=true to take the rules from container labels")
+		}
+		data = []byte("{}")
+	}
 	dec := yaml.NewDecoder(strings.NewReader(string(data)))
 	dec.KnownFields(true)
 	if err := dec.Decode(&c); err != nil {
-		return nil, fmt.Errorf("config: %w", err)
+		return nil, yamlError(err)
 	}
 	if v := getenv("CODIGATE_EDGE"); v != "" {
 		c.Edge = v
@@ -147,7 +169,8 @@ func Parse(data []byte, getenv func(string) string) (*Config, error) {
 	if c.Token == "" && c.TokenFile != "" {
 		b, err := os.ReadFile(c.TokenFile)
 		if err != nil {
-			return nil, fmt.Errorf("config: token_file: %w", err)
+			return nil, fmt.Errorf("token_file %s can't be read (%w). Save the agent token from the dashboard in that file, "+
+				"or set CODIGATE_TOKEN instead", c.TokenFile, errors.Unwrap(err))
 		}
 		c.Token = strings.TrimSpace(string(b))
 	}
@@ -171,10 +194,13 @@ func (c *Config) validate() error {
 		errs = append(errs, fmt.Errorf("edge scheme %q not supported", u.Scheme))
 	}
 	if c.Token == "" {
-		errs = append(errs, errors.New("token is required (CODIGATE_TOKEN, token or token_file)"))
+		errs = append(errs, errors.New("no agent token. Set CODIGATE_TOKEN, or token_file: /path/to/token in the config. "+
+			"The token is shown when you create the agent in the dashboard (Agents, New token for a new one)"))
 	}
 	if len(c.Ingress) == 0 && !c.Docker.Enabled {
-		errs = append(errs, errors.New("at least one ingress rule is required (or docker.enabled)"))
+		errs = append(errs, errors.New("no ingress rules. Add at least one under ingress:, e.g. "+
+			"- hostname: app.example.com, service: http://localhost:8080, and end with a catch-all - service: http_status:404. "+
+			"Or set CODIGATE_DOCKER=true to take the rules from container labels"))
 	}
 	if c.Docker.Enabled {
 		if u, err := url.Parse(c.Docker.Endpoint); err != nil || (u.Scheme != "unix" && u.Scheme != "tcp") {
@@ -192,7 +218,7 @@ func (c *Config) validate() error {
 			continue
 		}
 		if r.Hostname == "" && i != len(c.Ingress)-1 {
-			errs = append(errs, fmt.Errorf("ingress[%d]: a catch-all rule (no hostname) must be last", i))
+			errs = append(errs, fmt.Errorf("ingress[%d]: a catch-all rule (no hostname) must be the last rule; the rules after it are never used", i))
 		}
 		if seen[r.Hostname] {
 			errs = append(errs, fmt.Errorf("ingress[%d]: duplicate hostname %q", i, r.Hostname))
@@ -200,6 +226,16 @@ func (c *Config) validate() error {
 		seen[r.Hostname] = true
 	}
 	return errors.Join(errs...)
+}
+
+// yamlError turns a YAML error into one line that keeps the line number.
+func yamlError(err error) error {
+	var te *yaml.TypeError
+	if errors.As(err, &te) {
+		return fmt.Errorf("unknown or wrong setting: %s. Compare with codigate.example.yml", strings.Join(te.Errors, "; "))
+	}
+	msg := strings.TrimPrefix(err.Error(), "yaml: ")
+	return fmt.Errorf("not valid YAML: %s. Check the indentation (spaces, not tabs) and quotes around that line", msg)
 }
 
 func (r *Rule) prepare() error {
